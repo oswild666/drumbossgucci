@@ -1,0 +1,146 @@
+/* Apple Lisa inspired monochrome blue theme */
+:root {
+    --background-color: #000033; /* Dark blue */
+    --text-color: #66ccff;       /* Light blue */
+    --highlight-color: #99ffff;  /* Cyan highlight */
+    --border-color: #336699;     /* Muted blue for borders */
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin: 0;
+    padding: 20px;
+    -webkit-font-smoothing: none; /* For a sharper, retro font look */
+    -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.header {
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.title {
+    font-size: 24px;
+    font-weight: normal;
+    margin: 0;
+    letter-spacing: 2px;
+    color: var(--highlight-color);
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+label {
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+input[type="number"],
+input[type="range"] {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 5px;
+    width: 60px;
+}
+
+button {
+    background-color: transparent;
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: uppercase;
+}
+
+button:hover {
+    background-color: var(--border-color);
+    color: var(--highlight-color);
+}
+
+button:active {
+    background-color: var(--highlight-color);
+    color: var(--background-color);
+}
+
+.main-content {
+    display: flex;
+    gap: 20px;
+}
+
+.patterns-container {
+    flex-grow: 1;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    min-height: 400px;
+}
+
+.synth-settings-container {
+    width: 300px;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+}
+
+.pattern-row {
+    display: flex;
+    margin-bottom: 4px;
+}
+
+.step {
+    width: 20px;
+    height: 30px;
+    border: 1px solid var(--border-color);
+    margin-right: 4px;
+    cursor: pointer;
+    background-color: #000033;
+    transition: background-color 0.1s;
+}
+
+/* Highlight every 4th step */
+.step:nth-child(4n) {
+    border-color: #4a7a9c;
+}
+
+/* Highlight every 16th step */
+.step:nth-child(16n) {
+    border-color: var(--highlight-color);
+}
+
+.step:hover {
+    background-color: #336699;
+}
+
+.step.active {
+    background-color: var(--text-color);
+}
+
+.step.playing {
+    outline: 2px solid var(--highlight-color);
+    outline-offset: 1px;
+    box-shadow: 0 0 10px var(--highlight-color);
+}
