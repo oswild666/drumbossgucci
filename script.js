@@ -22,39 +22,170 @@ document.addEventListener('DOMContentLoaded', () => {
     const NUM_PATTERNS = 7;
     const NUM_STEPS = 64;
     const patterns = [];
+    let noiseBuffer = null;
+
+    // --- Synth Parameters State ---
+    const synthParams = {
+        kick: { decay: 0.5, startPitch: 150, endPitch: 40, fmAmount: 250 },
+        snare: {}, // placeholders for future steps
+        hat: {},
+        clap: {},
+        tom: {}
+    };
 
     // --- Sound Synthesis ---
+
+    function createNoiseBuffer() {
+        if (!audioContext) return;
+        const bufferSize = audioContext.sampleRate * 2; // 2 seconds of noise
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const output = buffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1;
+        }
+        return buffer;
+    }
+
+    function createSnare(time) {
+        if (!audioContext) return;
+
+        const masterGain = audioContext.createGain();
+        masterGain.connect(audioContext.destination);
+
+        // Noise component
+        const noiseSource = audioContext.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+
+        const noiseFilter = audioContext.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.value = 1500;
+
+        const noiseGain = audioContext.createGain();
+        noiseGain.gain.setValueAtTime(1, time);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+
+        noiseSource.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(masterGain);
+
+        // Tonal component
+        const bodyOsc = audioContext.createOscillator();
+        bodyOsc.type = 'triangle';
+        bodyOsc.frequency.setValueAtTime(200, time);
+        bodyOsc.frequency.exponentialRampToValueAtTime(100, time + 0.1);
+
+        const bodyGain = audioContext.createGain();
+        bodyGain.gain.setValueAtTime(1, time);
+        bodyGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+        bodyOsc.connect(bodyGain);
+        bodyGain.connect(masterGain);
+
+        // Start and stop
+        noiseSource.start(time);
+        noiseSource.stop(time + 0.2);
+        bodyOsc.start(time);
+        bodyOsc.stop(time + 0.2);
+    }
+
+    function createHat(time, type = 'closed') {
+        if (!audioContext) return;
+
+        const decayTime = type === 'closed' ? 0.05 : 0.4;
+
+        const gain = audioContext.createGain();
+        gain.connect(audioContext.destination);
+        gain.gain.setValueAtTime(0.5, time); // Lower volume for hats
+        gain.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
+
+        const highpass = audioContext.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.value = 7000;
+        highpass.connect(gain);
+
+        const noiseSource = audioContext.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+        noiseSource.connect(highpass);
+
+        noiseSource.start(time);
+        noiseSource.stop(time + decayTime);
+    }
+
+    function createClap(time) {
+        if (!audioContext) return;
+
+        const masterGain = audioContext.createGain();
+        masterGain.connect(audioContext.destination);
+        masterGain.gain.value = 0.6; // Claps can be loud
+
+        // The "tail" of the clap
+        const tailGain = audioContext.createGain();
+        tailGain.gain.setValueAtTime(1, time);
+        tailGain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+
+        const tailFilter = audioContext.createBiquadFilter();
+        tailFilter.type = 'bandpass';
+        tailFilter.frequency.value = 1200;
+        tailFilter.Q.value = 5;
+        tailFilter.connect(tailGain);
+        tailGain.connect(masterGain);
+
+        const tailSource = audioContext.createBufferSource();
+        tailSource.buffer = noiseBuffer;
+        tailSource.connect(tailFilter);
+        tailSource.start(time);
+        tailSource.stop(time + 0.2);
+
+        // The short, sharp "slaps"
+        const slapDelays = [0, 0.008, 0.015]; // in seconds
+        slapDelays.forEach(delay => {
+            const slapGain = audioContext.createGain();
+            slapGain.gain.setValueAtTime(1, time + delay);
+            slapGain.gain.exponentialRampToValueAtTime(0.01, time + delay + 0.02);
+
+            const slapSource = audioContext.createBufferSource();
+            slapSource.buffer = noiseBuffer;
+            slapSource.connect(slapGain);
+            slapGain.connect(masterGain);
+
+            slapSource.start(time + delay);
+            slapSource.stop(time + delay + 0.02);
+        });
+    }
+
     function createKick(time) {
         if (!audioContext) return;
+        const params = synthParams.kick;
+        const decayTime = params.decay;
+
         const ampEnvelope = audioContext.createGain();
         ampEnvelope.connect(audioContext.destination);
         ampEnvelope.gain.setValueAtTime(1.0, time);
-        ampEnvelope.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+        ampEnvelope.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
 
         const carrier = audioContext.createOscillator();
         carrier.type = 'triangle';
         carrier.connect(ampEnvelope);
 
-        const startPitch = 150;
-        const endPitch = 40;
-        carrier.frequency.setValueAtTime(startPitch, time);
-        carrier.frequency.exponentialRampToValueAtTime(endPitch, time + 0.15);
+        carrier.frequency.setValueAtTime(params.startPitch, time);
+        carrier.frequency.exponentialRampToValueAtTime(params.endPitch, time + 0.15);
 
         const modulator = audioContext.createOscillator();
         modulator.type = 'triangle';
-        modulator.frequency.setValueAtTime(100, time);
+        modulator.frequency.setValueAtTime(100, time); // Can also be a parameter
 
         const modulatorGain = audioContext.createGain();
-        modulatorGain.gain.setValueAtTime(250, time);
+        modulatorGain.gain.setValueAtTime(params.fmAmount, time);
         modulatorGain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
 
         modulator.connect(modulatorGain);
         modulatorGain.connect(carrier.frequency);
 
         carrier.start(time);
-        carrier.stop(time + 0.5);
+        carrier.stop(time + decayTime);
         modulator.start(time);
-        modulator.stop(time + 0.5);
+        modulator.stop(time + decayTime);
     }
 
     // --- UI Generation & Handling ---
@@ -110,10 +241,25 @@ document.addEventListener('DOMContentLoaded', () => {
             patterns[i] = new Array(NUM_STEPS).fill(0);
         }
 
-        patterns[0][0] = 1; patterns[0][4] = 1; patterns[0][8] = 1; patterns[0][12] = 1;
-        patterns[0][16] = 1; patterns[0][20] = 1; patterns[0][24] = 1; patterns[0][28] = 1;
-        patterns[0][32] = 1; patterns[0][36] = 1; patterns[0][40] = 1; patterns[0][44] = 1;
-        patterns[0][48] = 1; patterns[0][52] = 1; patterns[0][56] = 1; patterns[0][60] = 1;
+        // Test Pattern: Kick, Snare, and Hats
+        patterns[0][0] = 1; // Kick
+        patterns[0][16] = 1;
+        patterns[0][32] = 1;
+        patterns[0][48] = 1;
+
+        patterns[1][16] = 1; // Snare
+        patterns[1][48] = 1;
+
+        // Closed hats on 8th notes
+        for (let i = 0; i < NUM_STEPS; i += 8) {
+            patterns[2][i] = 1;
+        }
+
+        // Open hat
+        patterns[3][56] = 1;
+
+        // Clap
+        patterns[4][32] = 1;
 
         createPatternGrid();
         patternsContainer.addEventListener('click', handleStepClick);
@@ -124,6 +270,38 @@ document.addEventListener('DOMContentLoaded', () => {
         bpmInput.addEventListener('input', (e) => { bpm = parseInt(e.target.value, 10); });
         playStopButton.addEventListener('click', togglePlayback);
         restartButton.addEventListener('click', restartSequence);
+
+        // --- Synth Panel UI Logic ---
+        function setupParameterControls() {
+            const kickControls = {
+                decay: document.getElementById('kick-decay'),
+                startPitch: document.getElementById('kick-start-pitch'),
+                endPitch: document.getElementById('kick-end-pitch'),
+                fmAmount: document.getElementById('kick-fm-amount')
+            };
+
+            kickControls.decay.addEventListener('input', e => synthParams.kick.decay = parseFloat(e.target.value));
+            kickControls.startPitch.addEventListener('input', e => synthParams.kick.startPitch = parseInt(e.target.value, 10));
+            kickControls.endPitch.addEventListener('input', e => synthParams.kick.endPitch = parseInt(e.target.value, 10));
+            kickControls.fmAmount.addEventListener('input', e => synthParams.kick.fmAmount = parseInt(e.target.value, 10));
+        }
+        setupParameterControls();
+
+        const instrumentSelectors = document.querySelector('.instrument-selectors');
+        instrumentSelectors.addEventListener('click', (e) => {
+            if (!e.target.matches('.selector-btn')) return;
+
+            const instrument = e.target.dataset.instrument;
+
+            // Update button active states
+            document.querySelectorAll('.selector-btn').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+
+            // Update panel visibility
+            document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.remove('active'));
+            document.getElementById(`${instrument}-settings`).classList.add('active');
+        });
+
         console.log('GUCCI DRUM Initialized.');
     }
 
@@ -131,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!audioContext) {
             try {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                noiseBuffer = createNoiseBuffer(); // Create noise buffer once context is ready
             } catch (e) {
                 alert('Web Audio API is not supported in this browser.');
             }
@@ -142,6 +321,18 @@ document.addEventListener('DOMContentLoaded', () => {
         while (nextStepTime < audioContext.currentTime + 0.1) {
             if (patterns[0][currentStep] === 1) {
                 createKick(nextStepTime);
+            }
+            if (patterns[1][currentStep] === 1) {
+                createSnare(nextStepTime);
+            }
+            if (patterns[2][currentStep] === 1) {
+                createHat(nextStepTime, 'closed');
+            }
+            if (patterns[3][currentStep] === 1) {
+                createHat(nextStepTime, 'open');
+            }
+            if (patterns[4][currentStep] === 1) {
+                createClap(nextStepTime);
             }
 
             const secondsPerBeat = 60.0 / bpm;

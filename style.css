@@ -144,3 +144,58 @@ button:active {
     outline-offset: 1px;
     box-shadow: 0 0 10px var(--highlight-color);
 }
+
+.instrument-selectors {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.selector-btn {
+    flex-grow: 1;
+    border: 1px solid var(--border-color);
+    background-color: transparent;
+    color: var(--text-color);
+    padding: 8px;
+}
+
+.selector-btn.active {
+    background-color: var(--border-color);
+    color: var(--highlight-color);
+    border-color: var(--highlight-color);
+}
+
+.settings-panel {
+    display: none;
+}
+
+.settings-panel.active {
+    display: block;
+}
+
+.settings-panel h3 {
+    margin-top: 0;
+    font-weight: normal;
+    text-transform: uppercase;
+    color: var(--highlight-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 5px;
+    margin-bottom: 15px;
+}
+
+.param-slider {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.param-slider label {
+    margin-bottom: 5px;
+    font-size: 11px;
+}
+
+.param-slider input[type="range"] {
+    width: 100%;
+}
