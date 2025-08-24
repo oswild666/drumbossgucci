@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Audio & Sequencer State ---
     let audioContext;
+    let masterGain;
+    let saturator;
     let isPlaying = false;
     let currentStep = 0;
     let lastDrawStep = -1;
@@ -27,13 +29,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Synth Parameters State ---
     const synthParams = {
         kick: { decay: 0.5, startPitch: 150, endPitch: 40, fmAmount: 250 },
-        snare: {}, // placeholders for future steps
-        hat: {},
-        clap: {},
-        tom: {}
+        snare: { toneDecay: 0.1, noiseDecay: 0.2, noiseFilterFreq: 1500, balance: 0.5 },
+        hat: { closedDecay: 0.05, openDecay: 0.4, filterFreq: 7000 },
+        clap: { decay: 0.2, spread: 0.008 },
+        tom: { decay: 0.3, startPitch: 400, endPitch: 200 }
     };
 
     // --- Sound Synthesis ---
+
+    function makeDistortionCurve(amount) {
+        const k = typeof amount === 'number' ? amount : 50;
+        const n_samples = 44100;
+        const curve = new Float32Array(n_samples);
+        const deg = Math.PI / 180;
+        let i = 0;
+        let x;
+        for ( ; i < n_samples; ++i ) {
+            x = i * 2 / n_samples - 1;
+            curve[i] = ( 3 + k ) * x * 20 * deg / ( Math.PI + k * Math.abs(x) );
+        }
+        return curve;
+    }
 
     function createNoiseBuffer() {
         if (!audioContext) return;
@@ -49,9 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createSnare(time) {
         if (!audioContext) return;
+        const params = synthParams.snare;
+        const totalDecay = Math.max(params.toneDecay, params.noiseDecay);
 
-        const masterGain = audioContext.createGain();
-        masterGain.connect(audioContext.destination);
+        const masterSnareGain = audioContext.createGain();
+        masterSnareGain.connect(masterGain);
 
         // Noise component
         const noiseSource = audioContext.createBufferSource();
@@ -59,49 +77,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const noiseFilter = audioContext.createBiquadFilter();
         noiseFilter.type = 'highpass';
-        noiseFilter.frequency.value = 1500;
+        noiseFilter.frequency.value = params.noiseFilterFreq;
 
         const noiseGain = audioContext.createGain();
-        noiseGain.gain.setValueAtTime(1, time);
-        noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+        noiseGain.gain.value = 1.0 - params.balance; // Controlled by balance
+        noiseGain.gain.setValueAtTime(noiseGain.gain.value, time);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, time + params.noiseDecay);
 
         noiseSource.connect(noiseFilter);
         noiseFilter.connect(noiseGain);
-        noiseGain.connect(masterGain);
+        noiseGain.connect(masterSnareGain);
 
         // Tonal component
         const bodyOsc = audioContext.createOscillator();
         bodyOsc.type = 'triangle';
         bodyOsc.frequency.setValueAtTime(200, time);
-        bodyOsc.frequency.exponentialRampToValueAtTime(100, time + 0.1);
+        bodyOsc.frequency.exponentialRampToValueAtTime(100, time + params.toneDecay);
 
         const bodyGain = audioContext.createGain();
-        bodyGain.gain.setValueAtTime(1, time);
-        bodyGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+        bodyGain.gain.value = params.balance; // Controlled by balance
+        bodyGain.gain.setValueAtTime(bodyGain.gain.value, time);
+        bodyGain.gain.exponentialRampToValueAtTime(0.01, time + params.toneDecay);
 
         bodyOsc.connect(bodyGain);
-        bodyGain.connect(masterGain);
+        bodyGain.connect(masterSnareGain);
 
         // Start and stop
         noiseSource.start(time);
-        noiseSource.stop(time + 0.2);
+        noiseSource.stop(time + totalDecay);
         bodyOsc.start(time);
-        bodyOsc.stop(time + 0.2);
+        bodyOsc.stop(time + totalDecay);
     }
 
     function createHat(time, type = 'closed') {
         if (!audioContext) return;
-
-        const decayTime = type === 'closed' ? 0.05 : 0.4;
+        const params = synthParams.hat;
+        const decayTime = type === 'closed' ? params.closedDecay : params.openDecay;
 
         const gain = audioContext.createGain();
-        gain.connect(audioContext.destination);
+        gain.connect(masterGain);
         gain.gain.setValueAtTime(0.5, time); // Lower volume for hats
         gain.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
 
         const highpass = audioContext.createBiquadFilter();
         highpass.type = 'highpass';
-        highpass.frequency.value = 7000;
+        highpass.frequency.value = params.filterFreq;
         highpass.connect(gain);
 
         const noiseSource = audioContext.createBufferSource();
@@ -114,31 +134,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createClap(time) {
         if (!audioContext) return;
+        const params = synthParams.clap;
 
-        const masterGain = audioContext.createGain();
-        masterGain.connect(audioContext.destination);
-        masterGain.gain.value = 0.6; // Claps can be loud
+        const masterClapGain = audioContext.createGain();
+        masterClapGain.connect(masterGain);
+        masterClapGain.gain.value = 0.6; // Claps can be loud
 
         // The "tail" of the clap
         const tailGain = audioContext.createGain();
         tailGain.gain.setValueAtTime(1, time);
-        tailGain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+        tailGain.gain.exponentialRampToValueAtTime(0.01, time + params.decay);
 
         const tailFilter = audioContext.createBiquadFilter();
         tailFilter.type = 'bandpass';
         tailFilter.frequency.value = 1200;
         tailFilter.Q.value = 5;
         tailFilter.connect(tailGain);
-        tailGain.connect(masterGain);
+        tailGain.connect(masterClapGain);
 
         const tailSource = audioContext.createBufferSource();
         tailSource.buffer = noiseBuffer;
         tailSource.connect(tailFilter);
         tailSource.start(time);
-        tailSource.stop(time + 0.2);
+        tailSource.stop(time + params.decay);
 
         // The short, sharp "slaps"
-        const slapDelays = [0, 0.008, 0.015]; // in seconds
+        const slapDelays = [0, params.spread, params.spread * 2]; // Dynamic spread
         slapDelays.forEach(delay => {
             const slapGain = audioContext.createGain();
             slapGain.gain.setValueAtTime(1, time + delay);
@@ -147,11 +168,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const slapSource = audioContext.createBufferSource();
             slapSource.buffer = noiseBuffer;
             slapSource.connect(slapGain);
-            slapGain.connect(masterGain);
+            slapGain.connect(masterClapGain);
 
             slapSource.start(time + delay);
             slapSource.stop(time + delay + 0.02);
         });
+    }
+
+    function createTom(time) {
+        if (!audioContext) return;
+        const params = synthParams.tom;
+        const decayTime = params.decay;
+
+        const ampEnvelope = audioContext.createGain();
+        ampEnvelope.connect(masterGain);
+        ampEnvelope.gain.setValueAtTime(1.0, time);
+        ampEnvelope.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
+
+        const osc = audioContext.createOscillator();
+        osc.type = 'triangle';
+        osc.connect(ampEnvelope);
+
+        osc.frequency.setValueAtTime(params.startPitch, time);
+        osc.frequency.exponentialRampToValueAtTime(params.endPitch, time + 0.2); // Faster pitch sweep for toms
+
+        osc.start(time);
+        osc.stop(time + decayTime);
     }
 
     function createKick(time) {
@@ -160,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const decayTime = params.decay;
 
         const ampEnvelope = audioContext.createGain();
-        ampEnvelope.connect(audioContext.destination);
+        ampEnvelope.connect(masterGain);
         ampEnvelope.gain.setValueAtTime(1.0, time);
         ampEnvelope.gain.exponentialRampToValueAtTime(0.001, time + decayTime);
 
@@ -261,6 +303,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Clap
         patterns[4][32] = 1;
 
+        // Toms
+        patterns[5][58] = 1;
+        patterns[5][60] = 1;
+        patterns[5][62] = 1;
+
         createPatternGrid();
         patternsContainer.addEventListener('click', handleStepClick);
 
@@ -273,17 +320,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- Synth Panel UI Logic ---
         function setupParameterControls() {
+            // Kick Controls
             const kickControls = {
                 decay: document.getElementById('kick-decay'),
                 startPitch: document.getElementById('kick-start-pitch'),
                 endPitch: document.getElementById('kick-end-pitch'),
                 fmAmount: document.getElementById('kick-fm-amount')
             };
-
             kickControls.decay.addEventListener('input', e => synthParams.kick.decay = parseFloat(e.target.value));
             kickControls.startPitch.addEventListener('input', e => synthParams.kick.startPitch = parseInt(e.target.value, 10));
             kickControls.endPitch.addEventListener('input', e => synthParams.kick.endPitch = parseInt(e.target.value, 10));
             kickControls.fmAmount.addEventListener('input', e => synthParams.kick.fmAmount = parseInt(e.target.value, 10));
+
+            // Snare Controls
+            const snareControls = {
+                toneDecay: document.getElementById('snare-tone-decay'),
+                noiseDecay: document.getElementById('snare-noise-decay'),
+                noiseFilter: document.getElementById('snare-noise-filter'),
+                balance: document.getElementById('snare-balance')
+            };
+            snareControls.toneDecay.addEventListener('input', e => synthParams.snare.toneDecay = parseFloat(e.target.value));
+            snareControls.noiseDecay.addEventListener('input', e => synthParams.snare.noiseDecay = parseFloat(e.target.value));
+            snareControls.noiseFilter.addEventListener('input', e => synthParams.snare.noiseFilterFreq = parseInt(e.target.value, 10));
+            snareControls.balance.addEventListener('input', e => synthParams.snare.balance = parseFloat(e.target.value));
+
+            // Hat Controls
+            const hatControls = {
+                closedDecay: document.getElementById('hat-closed-decay'),
+                openDecay: document.getElementById('hat-open-decay'),
+                filterFreq: document.getElementById('hat-filter-freq')
+            };
+            hatControls.closedDecay.addEventListener('input', e => synthParams.hat.closedDecay = parseFloat(e.target.value));
+            hatControls.openDecay.addEventListener('input', e => synthParams.hat.openDecay = parseFloat(e.target.value));
+            hatControls.filterFreq.addEventListener('input', e => synthParams.hat.filterFreq = parseInt(e.target.value, 10));
+
+            // Clap Controls
+            const clapControls = {
+                decay: document.getElementById('clap-decay'),
+                spread: document.getElementById('clap-spread')
+            };
+            clapControls.decay.addEventListener('input', e => synthParams.clap.decay = parseFloat(e.target.value));
+            clapControls.spread.addEventListener('input', e => synthParams.clap.spread = parseFloat(e.target.value));
+
+            // Master Controls
+            const driveControl = document.getElementById('drive');
+            driveControl.addEventListener('input', e => {
+                if (saturator) {
+                    saturator.curve = makeDistortionCurve(parseInt(e.target.value, 10));
+                }
+            });
         }
         setupParameterControls();
 
@@ -309,7 +394,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!audioContext) {
             try {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                noiseBuffer = createNoiseBuffer(); // Create noise buffer once context is ready
+                noiseBuffer = createNoiseBuffer();
+
+                // Set up master audio chain
+                masterGain = audioContext.createGain();
+                saturator = audioContext.createWaveShaper();
+                saturator.curve = makeDistortionCurve(0); // Start with no distortion
+                saturator.oversample = '4x';
+
+                masterGain.connect(saturator);
+                saturator.connect(audioContext.destination);
+
             } catch (e) {
                 alert('Web Audio API is not supported in this browser.');
             }
@@ -333,6 +428,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (patterns[4][currentStep] === 1) {
                 createClap(nextStepTime);
+            }
+            if (patterns[5][currentStep] === 1) {
+                createTom(nextStepTime);
             }
 
             const secondsPerBeat = 60.0 / bpm;
