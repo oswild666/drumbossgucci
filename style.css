@@ -199,3 +199,34 @@ button:active {
 .param-slider input[type="range"] {
     width: 100%;
 }
+
+.synth-group {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    margin-bottom: 15px;
+}
+
+.osc-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.synth-group h4, .synth-group h5 {
+    margin: 0 0 10px 0;
+    font-weight: normal;
+    text-transform: uppercase;
+    color: var(--text-color);
+    border-bottom: 1px dotted var(--border-color);
+    padding-bottom: 5px;
+}
+
+.synth-group h4 {
+    width: 100%;
+    text-align: center;
+    color: var(--highlight-color);
+}

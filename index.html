@@ -41,6 +41,7 @@
                     <button class="selector-btn" data-instrument="hat">Hat</button>
                     <button class="selector-btn" data-instrument="clap">Clap</button>
                     <button class="selector-btn" data-instrument="tom">Tom</button>
+                    <button class="selector-btn" data-instrument="synth">Synth</button>
                 </div>
                 <div class="settings-panels">
                     <div class="settings-panel active" id="kick-settings">
@@ -109,7 +110,61 @@
                     </div>
                      <div class="settings-panel" id="tom-settings">
                         <h3>Tom Settings</h3>
-                        <!-- Tom controls will go here -->
+                        <div class="param-slider">
+                            <label for="tom-decay">Decay</label>
+                            <input type="range" id="tom-decay" min="0.1" max="1.0" step="0.01" value="0.3">
+                        </div>
+                        <div class="param-slider">
+                            <label for="tom-start-pitch">Start Pitch</label>
+                            <input type="range" id="tom-start-pitch" min="200" max="800" step="1" value="400">
+                        </div>
+                        <div class="param-slider">
+                            <label for="tom-end-pitch">End Pitch</label>
+                            <input type="range" id="tom-end-pitch" min="100" max="400" step="1" value="200">
+                        </div>
+                    </div>
+                    <div class="settings-panel" id="synth-settings">
+                        <h3>Main Synthesizer</h3>
+                        <div class="synth-global-controls">
+                             <div class="param-slider">
+                                <label for="synth-decay">Master Decay</label>
+                                <input type="range" id="synth-decay" min="0.1" max="2.0" step="0.01" value="0.5">
+                            </div>
+                        </div>
+                        <div class="synth-group">
+                            <h4>Group 1</h4>
+                            <div class="osc-column">
+                                <h5>OSC 1</h5>
+                                <div class="param-slider"><label>Pitch</label><input id="synth-osc1-pitch" type="range" min="-12" max="12" value="0"></div>
+                            </div>
+                            <div class="osc-column">
+                                <h5>OSC 2</h5>
+                                <div class="param-slider"><label>Pitch</label><input id="synth-osc2-pitch" type="range" min="-12" max="12" value="0"></div>
+                                <div class="param-slider"><label>FM Depth</label><input id="synth-osc2-fmdepth" type="range" min="0" max="500" value="100"></div>
+                            </div>
+                            <div class="osc-column">
+                                <h5>OSC 3</h5>
+                                <div class="param-slider"><label>Pitch</label><input id="synth-osc3-pitch" type="range" min="-12" max="12" value="0"></div>
+                                <div class="param-slider"><label>RM Depth</label><input id="synth-osc3-rmdepth" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+                            </div>
+                        </div>
+                        <div class="synth-group">
+                            <h4>Group 2</h4>
+                             <div class="osc-column">
+                                <h5>OSC 4</h5>
+                                <div class="param-slider"><label>Pitch</label><input id="synth-osc4-pitch" type="range" min="-12" max="12" value="0"></div>
+                            </div>
+                            <div class="osc-column">
+                                <h5>OSC 5</h5>
+                                <div class="param-slider"><label>Pitch</label><input id="synth-osc5-pitch" type="range" min="-12" max="12" value="0"></div>
+                                <div class="param-slider"><label>FM Depth</label><input id="synth-osc5-fmdepth" type="range" min="0" max="500" value="100"></div>
+                            </div>
+                            <div class="osc-column">
+                                <h5>OSC 6</h5>
+                                <div class="param-slider"><label>Pitch</label><input id="synth-osc6-pitch" type="range" min="-12" max="12" value="0"></div>
+                                <div class="param-slider"><label>RM Depth</label><input id="synth-osc6-rmdepth" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

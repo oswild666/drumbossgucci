@@ -32,7 +32,18 @@ document.addEventListener('DOMContentLoaded', () => {
         snare: { toneDecay: 0.1, noiseDecay: 0.2, noiseFilterFreq: 1500, balance: 0.5 },
         hat: { closedDecay: 0.05, openDecay: 0.4, filterFreq: 7000 },
         clap: { decay: 0.2, spread: 0.008 },
-        tom: { decay: 0.3, startPitch: 400, endPitch: 200 }
+        tom: { decay: 0.3, startPitch: 400, endPitch: 200 },
+        mainSynth: {
+            oscillators: [
+                { pitch: 0 }, // OSC 1
+                { pitch: 0, fmDepth: 100 }, // OSC 2
+                { pitch: 0, rmDepth: 0.5 }, // OSC 3
+                { pitch: 0 }, // OSC 4
+                { pitch: 0, fmDepth: 100 }, // OSC 5
+                { pitch: 0, rmDepth: 0.5 }, // OSC 6
+            ],
+            decay: 0.5
+        }
     };
 
     // --- Sound Synthesis ---
@@ -49,6 +60,75 @@ document.addEventListener('DOMContentLoaded', () => {
             curve[i] = ( 3 + k ) * x * 20 * deg / ( Math.PI + k * Math.abs(x) );
         }
         return curve;
+    }
+
+    function noteToFreq(note) {
+        const notes = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
+        const octave = parseInt(note.slice(-1), 10);
+        const key = note.slice(0, -1);
+        const semitone = notes[key];
+        return 440 * Math.pow(2, (octave - 4) + (semitone - 9) / 12);
+    }
+
+    function createSynthNote(note, time) {
+        if (!audioContext) return;
+        const params = synthParams.mainSynth;
+        const baseFreq = noteToFreq(note);
+
+        const noteGain = audioContext.createGain();
+        noteGain.connect(masterGain);
+        noteGain.gain.setValueAtTime(0.3, time);
+        noteGain.gain.exponentialRampToValueAtTime(0.01, time + params.decay);
+
+        function semitoneToRatio(semitones) {
+            return Math.pow(2, semitones / 12);
+        }
+
+        // --- Group 1: OSC 1, 2, 3 ---
+        const group1 = {
+            osc1: audioContext.createOscillator(),
+            osc2: audioContext.createOscillator(),
+            osc3: audioContext.createOscillator(),
+            fmGain: audioContext.createGain(),
+            rmGain: audioContext.createGain()
+        };
+        group1.osc1.connect(group1.fmGain);
+        group1.fmGain.connect(group1.osc2.frequency);
+        group1.osc2.connect(group1.rmGain);
+        group1.osc3.connect(group1.rmGain.gain);
+        group1.rmGain.connect(noteGain);
+
+        group1.osc1.frequency.value = baseFreq * semitoneToRatio(params.oscillators[0].pitch);
+        group1.osc2.frequency.value = baseFreq * semitoneToRatio(params.oscillators[1].pitch);
+        group1.osc3.frequency.value = baseFreq * semitoneToRatio(params.oscillators[2].pitch);
+        group1.fmGain.gain.value = params.oscillators[1].fmDepth;
+        group1.rmGain.gain.value = params.oscillators[2].rmDepth;
+
+        // --- Group 2: OSC 4, 5, 6 ---
+         const group2 = {
+            osc4: audioContext.createOscillator(),
+            osc5: audioContext.createOscillator(),
+            osc6: audioContext.createOscillator(),
+            fmGain: audioContext.createGain(),
+            rmGain: audioContext.createGain()
+        };
+        group2.osc4.connect(group2.fmGain);
+        group2.fmGain.connect(group2.osc5.frequency);
+        group2.osc5.connect(group2.rmGain);
+        group2.osc6.connect(group2.rmGain.gain);
+        group2.rmGain.connect(noteGain);
+
+        group2.osc4.frequency.value = baseFreq * semitoneToRatio(params.oscillators[3].pitch);
+        group2.osc5.frequency.value = baseFreq * semitoneToRatio(params.oscillators[4].pitch);
+        group2.osc6.frequency.value = baseFreq * semitoneToRatio(params.oscillators[5].pitch);
+        group2.fmGain.gain.value = params.oscillators[4].fmDepth;
+        group2.rmGain.gain.value = params.oscillators[5].rmDepth;
+
+        const allOscs = [group1.osc1, group1.osc2, group1.osc3, group2.osc4, group2.osc5, group2.osc6];
+        allOscs.forEach(osc => {
+            osc.start(time);
+            osc.stop(time + params.decay);
+        });
     }
 
     function createNoiseBuffer() {
@@ -240,7 +320,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 step.classList.add('step');
                 step.dataset.pattern = p;
                 step.dataset.step = s;
-                if (patterns[p][s] === 1) {
+                // For synth track, check for non-zero/null/undefined value
+                if ((p === 6 && patterns[p][s]) || (p < 6 && patterns[p][s] === 1)) {
                     step.classList.add('active');
                 }
                 row.appendChild(step);
@@ -255,8 +336,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const pattern = parseInt(event.target.dataset.pattern, 10);
         const step = parseInt(event.target.dataset.step, 10);
 
-        patterns[pattern][step] = patterns[pattern][step] === 1 ? 0 : 1;
-        event.target.classList.toggle('active');
+        // Disable note editing for synth track for now, as it's more complex
+        if (pattern < 6) {
+            patterns[pattern][step] = patterns[pattern][step] === 1 ? 0 : 1;
+            event.target.classList.toggle('active');
+        }
     }
 
     function updateUI() {
@@ -307,6 +391,12 @@ document.addEventListener('DOMContentLoaded', () => {
         patterns[5][58] = 1;
         patterns[5][60] = 1;
         patterns[5][62] = 1;
+
+        // Synth Melody
+        patterns[6][0] = 'C4';
+        patterns[6][8] = 'E4';
+        patterns[6][16] = 'G4';
+        patterns[6][24] = 'C5';
 
         createPatternGrid();
         patternsContainer.addEventListener('click', handleStepClick);
@@ -361,6 +451,30 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             clapControls.decay.addEventListener('input', e => synthParams.clap.decay = parseFloat(e.target.value));
             clapControls.spread.addEventListener('input', e => synthParams.clap.spread = parseFloat(e.target.value));
+
+            // Tom Controls
+            const tomControls = {
+                decay: document.getElementById('tom-decay'),
+                startPitch: document.getElementById('tom-start-pitch'),
+                endPitch: document.getElementById('tom-end-pitch')
+            };
+            tomControls.decay.addEventListener('input', e => synthParams.tom.decay = parseFloat(e.target.value));
+            tomControls.startPitch.addEventListener('input', e => synthParams.tom.startPitch = parseInt(e.target.value, 10));
+            tomControls.endPitch.addEventListener('input', e => synthParams.tom.endPitch = parseInt(e.target.value, 10));
+
+            // Main Synth Controls
+            document.getElementById('synth-decay').addEventListener('input', e => synthParams.mainSynth.decay = parseFloat(e.target.value));
+
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`synth-osc${i}-pitch`).addEventListener('input', e => {
+                    synthParams.mainSynth.oscillators[i - 1].pitch = parseInt(e.target.value, 10);
+                });
+            }
+            document.getElementById('synth-osc2-fmdepth').addEventListener('input', e => synthParams.mainSynth.oscillators[1].fmDepth = parseInt(e.target.value, 10));
+            document.getElementById('synth-osc3-rmdepth').addEventListener('input', e => synthParams.mainSynth.oscillators[2].rmDepth = parseFloat(e.target.value));
+            document.getElementById('synth-osc5-fmdepth').addEventListener('input', e => synthParams.mainSynth.oscillators[4].fmDepth = parseInt(e.target.value, 10));
+            document.getElementById('synth-osc6-rmdepth').addEventListener('input', e => synthParams.mainSynth.oscillators[5].rmDepth = parseFloat(e.target.value));
+
 
             // Master Controls
             const driveControl = document.getElementById('drive');
@@ -431,6 +545,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (patterns[5][currentStep] === 1) {
                 createTom(nextStepTime);
+            }
+            if (patterns[6][currentStep]) {
+                createSynthNote(patterns[6][currentStep], nextStepTime);
             }
 
             const secondsPerBeat = 60.0 / bpm;
