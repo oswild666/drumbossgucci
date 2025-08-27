@@ -42,11 +42,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 { pitch: 0, fmDepth: 100 }, // OSC 5
                 { pitch: 0, rmDepth: 0.5 }, // OSC 6
             ],
-            decay: 0.5
+            decay: 0.5,
+            chordMode: false,
+            chordType: 'Maj',
+            inversion: 0
         }
     };
 
     // --- Sound Synthesis ---
+
+    const CHORD_MAP = {
+        'Maj': [0, 4, 7],
+        'min': [0, 3, 7],
+        'dim': [0, 3, 6],
+        'aug': [0, 4, 8],
+        'Maj7': [0, 4, 7, 11],
+        'min7': [0, 3, 7, 10],
+        'dom7': [0, 4, 7, 10],
+        'dim7': [0, 3, 6, 9],
+        'm7b5': [0, 3, 6, 10], // Half-diminished
+        'sus2': [0, 2, 7],
+        'sus4': [0, 5, 7],
+        'Maj6': [0, 4, 7, 9],
+        'min6': [0, 3, 7, 9],
+        'add9': [0, 4, 7, 14],
+        'madd9': [0, 3, 7, 14],
+        '7sus4': [0, 5, 7, 10],
+        'Maj9': [0, 4, 7, 11, 14],
+        'min9': [0, 3, 7, 10, 14],
+        'dom9': [0, 4, 7, 10, 14],
+        'dom11': [0, 4, 7, 10, 14, 17],
+        'dom13': [0, 4, 7, 10, 14, 21],
+        'Maj_triad_2nd_inv': [0, 5, 9],
+        'min_triad_2nd_inv': [0, 5, 8],
+        'quartal': [0, 5, 10],
+        'quintal': [0, 7, 14],
+    };
 
     function makeDistortionCurve(amount) {
         const k = typeof amount === 'number' ? amount : 50;
@@ -70,54 +101,73 @@ document.addEventListener('DOMContentLoaded', () => {
         return 440 * Math.pow(2, (octave - 4) + (semitone - 9) / 12);
     }
 
-    function createSynthNote(note, time) {
+    function createSynthNote(rootNote, time) {
         if (!audioContext) return;
+
+        const synthSettings = synthParams.mainSynth;
+        let notesToPlay = [rootNote];
+
+        // If chord mode is active, calculate the notes of the chord
+        if (synthSettings.chordMode && CHORD_MAP[synthSettings.chordType]) {
+            let intervals = CHORD_MAP[synthSettings.chordType];
+
+            // Apply Inversion
+            for (let i = 0; i < synthSettings.inversion; i++) {
+                if (intervals.length > 1) {
+                    const first = intervals.shift();
+                    intervals.push(first + 12);
+                }
+            }
+
+            const rootOctave = parseInt(rootNote.slice(-1), 10);
+            const rootKey = rootNote.slice(0, -1);
+
+            // This is a simplified note calculation, a proper library would be better
+            const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            const rootIndex = noteNames.indexOf(rootKey);
+
+            notesToPlay = intervals.map(interval => {
+                const noteIndex = (rootIndex + interval);
+                const octave = rootOctave + Math.floor(noteIndex / 12);
+                return noteNames[noteIndex % 12] + octave;
+            });
+        }
+
+        notesToPlay.forEach(noteString => playSingleSynthVoice(noteString, time));
+    }
+
+    function playSingleSynthVoice(note, time) {
         const params = synthParams.mainSynth;
         const baseFreq = noteToFreq(note);
 
         const noteGain = audioContext.createGain();
         noteGain.connect(masterGain);
-        noteGain.gain.setValueAtTime(0.3, time);
+        noteGain.gain.setValueAtTime(0.3 / 3, time); // Reduce gain per note to avoid clipping
         noteGain.gain.exponentialRampToValueAtTime(0.01, time + params.decay);
 
         function semitoneToRatio(semitones) {
             return Math.pow(2, semitones / 12);
         }
 
-        // --- Group 1: OSC 1, 2, 3 ---
-        const group1 = {
-            osc1: audioContext.createOscillator(),
-            osc2: audioContext.createOscillator(),
-            osc3: audioContext.createOscillator(),
-            fmGain: audioContext.createGain(),
-            rmGain: audioContext.createGain()
-        };
+        // The full 6-oscillator logic for a single note
+        const group1 = { osc1: audioContext.createOscillator(), osc2: audioContext.createOscillator(), osc3: audioContext.createOscillator(), fmGain: audioContext.createGain(), rmGain: audioContext.createGain() };
         group1.osc1.connect(group1.fmGain);
         group1.fmGain.connect(group1.osc2.frequency);
         group1.osc2.connect(group1.rmGain);
         group1.osc3.connect(group1.rmGain.gain);
         group1.rmGain.connect(noteGain);
-
         group1.osc1.frequency.value = baseFreq * semitoneToRatio(params.oscillators[0].pitch);
         group1.osc2.frequency.value = baseFreq * semitoneToRatio(params.oscillators[1].pitch);
         group1.osc3.frequency.value = baseFreq * semitoneToRatio(params.oscillators[2].pitch);
         group1.fmGain.gain.value = params.oscillators[1].fmDepth;
         group1.rmGain.gain.value = params.oscillators[2].rmDepth;
 
-        // --- Group 2: OSC 4, 5, 6 ---
-         const group2 = {
-            osc4: audioContext.createOscillator(),
-            osc5: audioContext.createOscillator(),
-            osc6: audioContext.createOscillator(),
-            fmGain: audioContext.createGain(),
-            rmGain: audioContext.createGain()
-        };
+        const group2 = { osc4: audioContext.createOscillator(), osc5: audioContext.createOscillator(), osc6: audioContext.createOscillator(), fmGain: audioContext.createGain(), rmGain: audioContext.createGain() };
         group2.osc4.connect(group2.fmGain);
         group2.fmGain.connect(group2.osc5.frequency);
         group2.osc5.connect(group2.rmGain);
         group2.osc6.connect(group2.rmGain.gain);
         group2.rmGain.connect(noteGain);
-
         group2.osc4.frequency.value = baseFreq * semitoneToRatio(params.oscillators[3].pitch);
         group2.osc5.frequency.value = baseFreq * semitoneToRatio(params.oscillators[4].pitch);
         group2.osc6.frequency.value = baseFreq * semitoneToRatio(params.oscillators[5].pitch);
@@ -405,6 +455,16 @@ document.addEventListener('DOMContentLoaded', () => {
         swing = parseInt(swingSlider.value, 10) / 100;
         swingSlider.addEventListener('input', (e) => { swingValueDisplay.textContent = `${e.target.value}%`; swing = parseInt(e.target.value, 10) / 100; });
         bpmInput.addEventListener('input', (e) => { bpm = parseInt(e.target.value, 10); });
+
+        // Populate Chord Type dropdown
+        const chordTypeDropdown = document.getElementById('synth-chord-type');
+        for (const chordName in CHORD_MAP) {
+            const option = document.createElement('option');
+            option.value = chordName;
+            option.textContent = chordName;
+            chordTypeDropdown.appendChild(option);
+        }
+
         playStopButton.addEventListener('click', togglePlayback);
         restartButton.addEventListener('click', restartSequence);
 
@@ -464,6 +524,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Main Synth Controls
             document.getElementById('synth-decay').addEventListener('input', e => synthParams.mainSynth.decay = parseFloat(e.target.value));
+            document.getElementById('synth-chord-mode').addEventListener('change', e => synthParams.mainSynth.chordMode = e.target.checked);
+            document.getElementById('synth-chord-type').addEventListener('change', e => synthParams.mainSynth.chordType = e.target.value);
+            document.getElementById('synth-inversion').addEventListener('input', e => synthParams.mainSynth.inversion = parseInt(e.target.value, 10));
 
             for (let i = 1; i <= 6; i++) {
                 document.getElementById(`synth-osc${i}-pitch`).addEventListener('input', e => {
