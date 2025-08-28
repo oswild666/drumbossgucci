@@ -89,26 +89,56 @@ button:active {
 }
 
 .main-content {
-    display: flex;
+    /* display: flex; REMOVED FOR VERTICAL LAYOUT */
     gap: 20px;
 }
 
 .patterns-container {
-    flex-grow: 1;
+    /* flex-grow: 1; REMOVED */
     border: 1px solid var(--border-color);
     padding: 10px;
-    min-height: 400px;
+    min-height: 250px; /* Reduced height for mobile */
+    overflow-x: auto; /* Allow horizontal scrolling for steps */
+    margin-bottom: 20px;
 }
 
 .synth-settings-container {
-    width: 300px;
+    /* width: 300px; REMOVED */
+    width: 100%;
+    max-width: 600px; /* Limit width on larger screens */
+    margin: 0 auto; /* Center the settings panel */
     border: 1px solid var(--border-color);
     padding: 10px;
+}
+
+.pattern-row-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.pattern-row-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 80px;
+    font-size: 11px;
+}
+
+.pattern-row-controls input[type="number"] {
+    width: 100%;
+    padding: 2px;
+}
+
+.pattern-row-steps {
+    flex-grow: 1;
 }
 
 .pattern-row {
     display: flex;
     margin-bottom: 4px;
+    width: fit-content; /* Ensure row doesn't collapse */
 }
 
 .step {

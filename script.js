@@ -22,17 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Pattern Data Structure ---
     const NUM_PATTERNS = 7;
-    const NUM_STEPS = 64;
+    const MAX_STEPS = 64; // Maximum possible steps for any pattern
     const patterns = [];
     let noiseBuffer = null;
 
     // --- Synth Parameters State ---
     const synthParams = {
-        kick: { decay: 0.5, startPitch: 150, endPitch: 40, fmAmount: 250 },
-        snare: { toneDecay: 0.1, noiseDecay: 0.2, noiseFilterFreq: 1500, balance: 0.5 },
-        hat: { closedDecay: 0.05, openDecay: 0.4, filterFreq: 7000 },
-        clap: { decay: 0.2, spread: 0.008 },
-        tom: { decay: 0.3, startPitch: 400, endPitch: 200 },
+        kick: { decay: 0.5, startPitch: 150, endPitch: 40, fmAmount: 250, steps: 16 },
+        snare: { toneDecay: 0.1, noiseDecay: 0.2, noiseFilterFreq: 1500, balance: 0.5, steps: 16 },
+        hat: { closedDecay: 0.05, openDecay: 0.4, filterFreq: 7000, steps: 16 },
+        clap: { decay: 0.2, spread: 0.008, steps: 16 },
+        tom: { decay: 0.3, startPitch: 400, endPitch: 200, steps: 16 },
         mainSynth: {
             oscillators: [
                 { pitch: 0 }, // OSC 1
@@ -45,7 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
             decay: 0.5,
             chordMode: false,
             chordType: 'Maj',
-            inversion: 0
+            inversion: 0,
+            steps: 16
         }
     };
 
@@ -109,7 +110,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // If chord mode is active, calculate the notes of the chord
         if (synthSettings.chordMode && CHORD_MAP[synthSettings.chordType]) {
-            let intervals = CHORD_MAP[synthSettings.chordType];
+            // Create a copy to prevent mutating the original CHORD_MAP
+            let intervals = [...CHORD_MAP[synthSettings.chordType]];
 
             // Apply Inversion
             for (let i = 0; i < synthSettings.inversion; i++) {
@@ -362,22 +364,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- UI Generation & Handling ---
     function createPatternGrid() {
+        patternsContainer.innerHTML = ''; // Clear existing grid
+        const instruments = ['kick', 'snare', 'hat', 'clap', 'tom', 'mainSynth'];
+        // A bit of a hack to align the two hat rows to one control
+        const instrumentNames = ['Kick', 'Snare', 'Hat', 'Clap', 'Tom', 'Synth'];
+        let nameIndex = 0;
+
         for (let p = 0; p < NUM_PATTERNS; p++) {
-            const row = document.createElement('div');
-            row.classList.add('pattern-row');
-            for (let s = 0; s < NUM_STEPS; s++) {
-                const step = document.createElement('div');
-                step.classList.add('step');
-                step.dataset.pattern = p;
-                step.dataset.step = s;
-                // For synth track, check for non-zero/null/undefined value
-                if ((p === 6 && patterns[p][s]) || (p < 6 && patterns[p][s] === 1)) {
-                    step.classList.add('active');
-                }
-                row.appendChild(step);
+            const instrumentName = (p === 3) ? null : instrumentNames[nameIndex++]; // Don't show name for open hat
+            const instrumentKey = (p > 2) ? instruments[p-1] : instruments[p]; // Align open hat (3) to hat params (2)
+
+            const rowContainer = document.createElement('div');
+            rowContainer.classList.add('pattern-row-container');
+            rowContainer.dataset.instrumentIndex = p;
+
+            const controls = document.createElement('div');
+            controls.classList.add('pattern-row-controls');
+
+            if(instrumentName) {
+                const nameLabel = document.createElement('span');
+                nameLabel.textContent = instrumentName;
+                controls.appendChild(nameLabel);
+
+                const lengthInput = document.createElement('input');
+                lengthInput.type = 'number';
+                lengthInput.min = 1;
+                lengthInput.max = 64;
+                lengthInput.value = synthParams[instrumentKey].steps;
+                lengthInput.addEventListener('change', (e) => {
+                    let newLength = parseInt(e.target.value, 10);
+                    if (newLength > 64) newLength = 64;
+                    if (newLength < 1) newLength = 1;
+                    e.target.value = newLength;
+                    synthParams[instrumentKey].steps = newLength;
+                    redrawPatternRow(p, newLength);
+                    if(instrumentKey === 'hat') { // Redraw open hat too
+                         redrawPatternRow(3, newLength);
+                    }
+                });
+                controls.appendChild(lengthInput);
             }
-            patternsContainer.appendChild(row);
+            rowContainer.appendChild(controls);
+
+            const stepsWrapper = document.createElement('div');
+            stepsWrapper.classList.add('pattern-row-steps');
+            rowContainer.appendChild(stepsWrapper);
+
+            patternsContainer.appendChild(rowContainer);
+            redrawPatternRow(p, synthParams[instrumentKey].steps);
         }
+    }
+
+    function redrawPatternRow(patternIndex, numSteps) {
+        const stepsWrapper = document.querySelector(`.pattern-row-container[data-instrument-index='${patternIndex}'] .pattern-row-steps`);
+        stepsWrapper.innerHTML = '';
+
+        const row = document.createElement('div');
+        row.classList.add('pattern-row');
+
+        for (let s = 0; s < numSteps; s++) {
+            const step = document.createElement('div');
+            step.classList.add('step');
+            step.dataset.pattern = patternIndex;
+            step.dataset.step = s;
+            if ((patternIndex === 6 && patterns[patternIndex][s]) || (patternIndex < 6 && patterns[patternIndex][s] === 1)) {
+                step.classList.add('active');
+            }
+            row.appendChild(step);
+        }
+        stepsWrapper.appendChild(row);
     }
 
     function handleStepClick(event) {
@@ -395,17 +450,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateUI() {
         if (lastDrawStep !== -1) {
-            document.querySelectorAll(`.step[data-step='${lastDrawStep}']`).forEach(el => el.classList.remove('playing'));
+            document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
         }
 
-        // Use a different variable for drawing to avoid race conditions with scheduler
-        const stepToDraw = (currentStep - 1 + NUM_STEPS) % NUM_STEPS;
+        const stepToDraw = (currentStep > 0 ? currentStep - 1 : 0);
 
-        document.querySelectorAll(`.step[data-step='${stepToDraw}']`).forEach(el => el.classList.add('playing'));
+        // A map to get instrument key from pattern index `p`
+        const instrumentMap = ['kick', 'snare', 'hat', 'hat', 'clap', 'tom', 'mainSynth'];
+
+        for(let i = 0; i < NUM_PATTERNS; i++) {
+            const instrumentKey = instrumentMap[i];
+            const patternLength = synthParams[instrumentKey].steps;
+            const currentPatternStep = stepToDraw % patternLength;
+            const stepEl = document.querySelector(`.pattern-row-container[data-instrument-index='${i}'] .step[data-step='${currentPatternStep}']`);
+            if (stepEl) {
+                stepEl.classList.add('playing');
+            }
+        }
 
         lastDrawStep = stepToDraw;
-
-        // Keep UI update loop running
         if (isPlaying) {
             uiTimerID = setTimeout(updateUI, 1000 / 25); // ~25 FPS
         }
@@ -444,9 +507,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Synth Melody
         patterns[6][0] = 'C4';
-        patterns[6][8] = 'E4';
-        patterns[6][16] = 'G4';
-        patterns[6][24] = 'C5';
+        patterns[6][4] = 'E4';
+        patterns[6][8] = 'G4';
+        patterns[6][12] = 'C5';
 
         createPatternGrid();
         patternsContainer.addEventListener('click', handleStepClick);
@@ -591,29 +654,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Sequencer Logic ---
     function scheduler() {
         while (nextStepTime < audioContext.currentTime + 0.1) {
-            if (patterns[0][currentStep] === 1) {
+            // --- Trigger sounds based on master clock and individual pattern lengths ---
+            if (patterns[0][currentStep % synthParams.kick.steps] === 1) {
                 createKick(nextStepTime);
             }
-            if (patterns[1][currentStep] === 1) {
+            if (patterns[1][currentStep % synthParams.snare.steps] === 1) {
                 createSnare(nextStepTime);
             }
-            if (patterns[2][currentStep] === 1) {
+            if (patterns[2][currentStep % synthParams.hat.steps] === 1) {
                 createHat(nextStepTime, 'closed');
             }
-            if (patterns[3][currentStep] === 1) {
+            if (patterns[3][currentStep % synthParams.hat.steps] === 1) {
                 createHat(nextStepTime, 'open');
             }
-            if (patterns[4][currentStep] === 1) {
+            if (patterns[4][currentStep % synthParams.clap.steps] === 1) {
                 createClap(nextStepTime);
             }
-            if (patterns[5][currentStep] === 1) {
+            if (patterns[5][currentStep % synthParams.tom.steps] === 1) {
                 createTom(nextStepTime);
             }
-            if (patterns[6][currentStep]) {
-                createSynthNote(patterns[6][currentStep], nextStepTime);
+            const synthNote = patterns[6][currentStep % synthParams.mainSynth.steps];
+            if (synthNote) {
+                createSynthNote(synthNote, nextStepTime);
             }
 
             const secondsPerBeat = 60.0 / bpm;
+            if (!isFinite(secondsPerBeat)) return; // Guard against invalid BPM
             const sixteenthNoteDuration = secondsPerBeat / 4;
 
             if (currentStep % 2 !== 0) {
@@ -622,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 nextStepTime += sixteenthNoteDuration * (1 - (swing - 0.5) * 2);
             }
 
-            currentStep = (currentStep + 1) % NUM_STEPS;
+            currentStep++; // Master clock just keeps ticking up
         }
         schedulerTimerID = setTimeout(scheduler, 25.0);
     }
